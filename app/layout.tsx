@@ -3,8 +3,8 @@ import "./globals.css";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Kundenaktionen",
-  description: "Kunden-/Ansprechpartner-Liste mit Aktionen, Filter & Rollen",
+  title: "Ettlingen Kundenliste",
+  description: "Firmen und Ansprechpartner",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
