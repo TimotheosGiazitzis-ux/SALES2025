@@ -1,0 +1,3 @@
+-- Optional: nach Anlegen eines Users in Auth UI
+-- Tragt dessen UUID hier ein, um ihn zum Admin zu machen.
+-- insert into public.profiles (id, role) values ('00000000-0000-0000-0000-000000000000', 'admin');
