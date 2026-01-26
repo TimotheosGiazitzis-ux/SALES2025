@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <header className="header">
             <div className="brand">
               {/* Lege euer Logwin-Logo als /public/logo.svg oder /public/logo.png ab */}
-              <img src="/logo.svg" alt="Logo" />
+              <img src="/logo.png" alt="Logwin Logo" />
               <div>
                 <div className="title">Kundenaktionen</div>
                 <div className="small">Sales-Team • Aktionen • Filter • Export</div>
