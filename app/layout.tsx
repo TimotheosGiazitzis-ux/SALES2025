@@ -14,9 +14,9 @@ export default function RootLayout({
             <div className="brand">
               <img src="/logo.jpg" alt="Logwin Logo" height={34} />
               <div>
-                <div className="title">Kundenaktionen</div>
+                <div className="title">SALES KAE</div>
                 <div className="small">
-                  Sales-Team • Aktionen • Filter • Export
+                  Kundenliste • Aktionen • Newsletter
                 </div>
               </div>
             </div>
