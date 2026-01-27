@@ -32,7 +32,10 @@ export default async function ContactsPage() {
       flags:action_flags ( * )
     `)
     .order("name", { ascending: true });
-
+const rows = (data ?? []).map((r: any) => ({
+  ...r,
+  flags: Array.isArray(r.flags) ? r.flags[0] : r.flags,
+}));
   if (error) {
     return (
       <main className="card">
@@ -57,7 +60,7 @@ export default async function ContactsPage() {
         Filtere nach Aktion/Ort/Name und sieh die Live-Zähler oben. Azubi ist read-only.
       </p>
 
-      <ContactsTable role={role} rows={(data ?? []) as any[]} />
+      <ContactsTable role={role} rows={rows as any[]} />
     </main>
   );
 }
