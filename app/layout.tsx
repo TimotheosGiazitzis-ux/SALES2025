@@ -1,26 +1,26 @@
-import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
 
-export const metadata: Metadata = {
-  title: "Ettlingen Kundenliste",
-  description: "Firmen und Ansprechpartner",
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="de">
       <body>
         <div className="container">
           <header className="header">
             <div className="brand">
-              {/* Lege euer Logwin-Logo als /public/logo.jpg oder /public/logo.png ab */}
-              <img src="/logo.jpg" alt="Logwin Logo" />
+              <img src="/logo.jpg" alt="Logwin Logo" height={34} />
               <div>
                 <div className="title">Kundenaktionen</div>
-                <div className="small">Sales-Team • Aktionen • Filter • Export</div>
+                <div className="small">
+                  Sales-Team • Aktionen • Filter • Export
+                </div>
               </div>
             </div>
+
             <nav className="nav">
               <Link className="badge" href="/">Home</Link>
               <Link className="badge" href="/contacts">Ansprechpartner</Link>
@@ -29,11 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </nav>
           </header>
 
-          {children}
-
-          <footer className="small" style={{ marginTop: 16, opacity: 0.8 }}>
-            © {new Date().getFullYear()} • interner Sales-Tracker
-          </footer>
+          <main>{children}</main>
         </div>
       </body>
     </html>
