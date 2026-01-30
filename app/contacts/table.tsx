@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { canWrite } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/client";
 
@@ -22,29 +21,52 @@ const ACTIONS: { key: string; label: string }[] = [
   { key: "weihnachtsaktion", label: "Weihnachtsaktion" },
 ];
 
-export default function ContactsTable({
-  role,
-  rows,
-}: {
-  role: "admin" | "sales" | "azubi";
-  rows: any[];
-}) {
+type Role = "admin" | "sales" | "azubi";
+
+type Row = {
+  id: string; // contact id
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  title?: string | null;
+  notes?: string | null;
+  customer?: {
+    id?: string | null;
+    name?: string | null;
+    city?: string | null;
+    zip?: string | null;
+    country?: string | null;
+  } | null;
+  flags?: Record<string, any> | null; // action_flags as object
+};
+
+export default function ContactsTable({ role, rows }: { role: Role; rows: any[] }) {
   const supabase = createClient();
   const writable = canWrite(role);
 
   const [q, setQ] = useState("");
   const [country, setCountry] = useState("");
   const [actionFilter, setActionFilter] = useState<string>("");
+  const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
+
+  // Normalize rows: flags ist Objekt
+  const normalized: Row[] = useMemo(() => {
+    return (rows ?? []).map((r: any) => ({
+      ...r,
+      flags: r.flags ?? {},
+    }));
+  }, [rows]);
 
   const countries = useMemo(() => {
     const set = new Set<string>();
-    for (const r of rows) if (r.customer?.country) set.add(r.customer.country);
+    for (const r of normalized) if (r.customer?.country) set.add(r.customer.country);
     return Array.from(set).sort();
-  }, [rows]);
+  }, [normalized]);
 
-  const filtered = useMemo(() => {
+  const filteredContacts = useMemo(() => {
     const qq = q.trim().toLowerCase();
-    return rows.filter((r) => {
+
+    return normalized.filter((r) => {
       const hay = [
         r.name,
         r.email,
@@ -62,28 +84,48 @@ export default function ContactsTable({
       if (country && (r.customer?.country ?? "") !== country) return false;
 
       if (actionFilter) {
-        const f = r.flags; // <-- FIX: flags ist Objekt, nicht Array
-        if (!f || f[actionFilter] !== true) return false;
+        const f = r.flags ?? {};
+        if (!f[actionFilter]) return false;
       }
       return true;
     });
-  }, [rows, q, country, actionFilter]);
+  }, [normalized, q, country, actionFilter]);
 
+  // KPI: pro Ansprechpartner zählen
   const kpis = useMemo(() => {
-    const totalContacts = filtered.length;
-    const totalCustomers = new Set(filtered.map((r) => r.customer?.id).filter(Boolean)).size;
+    const totalContacts = filteredContacts.length;
+    const totalCustomers = new Set(filteredContacts.map((r) => r.customer?.id).filter(Boolean)).size;
 
     const perAction: Record<string, number> = {};
     for (const a of ACTIONS) perAction[a.key] = 0;
 
-    for (const r of filtered) {
-      const f = r.flags; // <-- FIX
-      if (!f) continue;
-      for (const a of ACTIONS) if (f[a.key] === true) perAction[a.key] += 1;
+    for (const r of filteredContacts) {
+      const f = r.flags ?? {};
+      for (const a of ACTIONS) if (f[a.key]) perAction[a.key] += 1;
     }
 
     return { totalContacts, totalCustomers, perAction };
-  }, [filtered]);
+  }, [filteredContacts]);
+
+  // Gruppieren nach Firma
+  const grouped = useMemo(() => {
+    const map = new Map<
+      string,
+      { customerId: string; customerName: string; customer: any; contacts: Row[] }
+    >();
+
+    for (const r of filteredContacts) {
+      const cid = (r.customer?.id ?? "NO_CUSTOMER") as string;
+      const cname = (r.customer?.name ?? "— ohne Firma —") as string;
+
+      if (!map.has(cid)) map.set(cid, { customerId: cid, customerName: cname, customer: r.customer ?? {}, contacts: [] });
+      map.get(cid)!.contacts.push(r);
+    }
+
+    const arr = Array.from(map.values()).sort((a, b) => a.customerName.localeCompare(b.customerName, "de"));
+    for (const g of arr) g.contacts.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "de"));
+    return arr;
+  }, [filteredContacts]);
 
   async function toggleFlag(contactId: string, key: string, next: boolean) {
     if (!writable) return;
@@ -97,136 +139,136 @@ export default function ContactsTable({
       return;
     }
 
-    // Einfachste Lösung: reload (für Starter ok)
     window.location.reload();
+  }
+
+  function toggleOpen(cid: string) {
+    setOpenCustomerId((prev) => (prev === cid ? null : cid));
   }
 
   return (
     <>
-      <div className="row" style={{ margin: "12px 0", justifyContent: "space-between", alignItems: "center" }}>
-        <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-          <div className="kpi">
-            <div style={{ fontSize: 12, color: "#666" }}>Kunden (gefiltert)</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{kpis.totalCustomers}</div>
-          </div>
-          <div className="kpi">
-            <div style={{ fontSize: 12, color: "#666" }}>Ansprechpartner (gefiltert)</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{kpis.totalContacts}</div>
-          </div>
-
-          <div className="kpi" style={{ flex: 1, minWidth: 320 }}>
-            <div style={{ fontSize: 12, color: "#666" }}>Aktion-Zähler (gefiltert)</div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
-              {ACTIONS.slice(0, 7).map((a) => (
-                <span key={a.key} className="badge">
-                  {a.label}: {kpis.perAction[a.key] ?? 0}
-                </span>
-              ))}
-            </div>
-          </div>
+      {/* KPIs */}
+      <div className="row" style={{ margin: "12px 0" }}>
+        <div className="kpi">
+          <div style={{ fontSize: 12, color: "#666" }}>Kunden (gefiltert)</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{kpis.totalCustomers}</div>
         </div>
-
-        <div className="row" style={{ gap: 10 }}>
-          <Link className="badge" href="/">Home</Link>
-          <Link className="badge" href="/logout">Logout</Link>
+        <div className="kpi">
+          <div style={{ fontSize: 12, color: "#666" }}>Ansprechpartner (gefiltert)</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{kpis.totalContacts}</div>
+        </div>
+        <div className="kpi" style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontSize: 12, color: "#666" }}>Aktion-Zähler (gefiltert) – pro Ansprechpartner</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+            {ACTIONS.slice(0, 7).map((a) => (
+              <span key={a.key} className="badge">
+                {a.label}: {kpis.perAction[a.key]}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="row" style={{ margin: "10px 0", gap: 10, flexWrap: "wrap" }}>
+      {/* Filter */}
+      <div className="row" style={{ margin: "10px 0" }}>
         <input
-          placeholder="Suche (Name/Firma/Ort/E-Mail...)"
+          placeholder="Suche (Firma/Ort/Name/E-Mail...)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           style={{ padding: 8, minWidth: 260, flex: 1, border: "1px solid #ddd", borderRadius: 12 }}
         />
-
-        <select
-          value={country}
-          onChange={(e) => setCountry(e.target.value)}
-          style={{ padding: 8, borderRadius: 12, border: "1px solid #ddd" }}
-        >
+        <select value={country} onChange={(e) => setCountry(e.target.value)} style={{ padding: 8, borderRadius: 12, border: "1px solid #ddd" }}>
           <option value="">Land (alle)</option>
           {countries.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
+            <option key={c} value={c}>{c}</option>
           ))}
         </select>
-
-        <select
-          value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value)}
-          style={{ padding: 8, borderRadius: 12, border: "1px solid #ddd" }}
-        >
+        <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)} style={{ padding: 8, borderRadius: 12, border: "1px solid #ddd" }}>
           <option value="">Aktion-Filter (alle)</option>
           {ACTIONS.map((a) => (
-            <option key={a.key} value={a.key}>
-              {a.label}
-            </option>
+            <option key={a.key} value={a.key}>{a.label}</option>
           ))}
         </select>
       </div>
 
       <p style={{ color: "#666", marginTop: 6 }}>
-        {writable ? "Du kannst Aktionen per Checkbox setzen." : "Read-only (Azubi): keine Änderungen möglich."}
+        {writable ? "Klicke auf eine Firma → Ansprechpartner klappt aus. Aktionen setzt du pro Ansprechpartner." : "Read-only (Azubi): keine Änderungen möglich."}
       </p>
 
+      {/* Firmenliste */}
       <table className="table">
         <thead>
           <tr>
             <th>Firma</th>
-            <th>Ansprechpartner</th>
-            <th>Kontakt</th>
             <th>Ort</th>
-            <th>Aktionen</th>
+            <th>Land</th>
+            <th>Ansprechpartner</th>
           </tr>
         </thead>
-
         <tbody>
-          {filtered.map((r) => {
-            const f = r.flags ?? {}; // <-- FIX: flags ist Objekt
+          {grouped.map((g) => {
+            const isOpen = openCustomerId === g.customerId;
             return (
-              <tr key={r.id}>
-                <td>
-                  <strong>{r.customer?.name ?? "-"}</strong>
-                </td>
+              <>
+                <tr key={g.customerId} style={{ cursor: "pointer" }} onClick={() => toggleOpen(g.customerId)}>
+                  <td>
+                    <strong>{g.customerName}</strong>{" "}
+                    <span className="small" style={{ marginLeft: 8 }}>{isOpen ? "▲" : "▼"}</span>
+                  </td>
+                  <td>{g.customer?.zip ?? ""} {g.customer?.city ?? ""}</td>
+                  <td>{g.customer?.country ?? ""}</td>
+                  <td><span className="badge">{g.contacts.length}</span></td>
+                </tr>
 
-                <td>{r.name ?? "-"}</td>
+                {isOpen && (
+                  <tr key={g.customerId + "__open"}>
+                    <td colSpan={4}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "10px 6px" }}>
+                        {g.contacts.map((r) => {
+                          const f = r.flags ?? {};
+                          return (
+                            <div key={r.id} className="card" style={{ padding: 12 }}>
+                              <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                                <div>
+                                  <div style={{ fontWeight: 700 }}>{r.name ?? "-"}</div>
+                                  <div className="small" style={{ marginTop: 2 }}>
+                                    {r.email ? <div>{r.email}</div> : null}
+                                    {r.phone ? <div>{r.phone}</div> : null}
+                                    {r.title ? <div>{r.title}</div> : null}
+                                  </div>
+                                </div>
+                                <div className="small" style={{ color: "#666" }}>
+                                  Aktionen: {ACTIONS.reduce((n, a) => n + (f[a.key] ? 1 : 0), 0)}
+                                </div>
+                              </div>
 
-                <td>
-                  {r.email && <div>{r.email}</div>}
-                  {r.phone && <div>{r.phone}</div>}
-                  {r.title && <div style={{ color: "#666" }}>{r.title}</div>}
-                </td>
-
-                <td>
-                  <div>
-                    {r.customer?.zip ?? ""} {r.customer?.city ?? ""}
-                  </div>
-                  <div style={{ color: "#666" }}>{r.customer?.country ?? ""}</div>
-                </td>
-
-                <td style={{ minWidth: 420 }}>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    {ACTIONS.map((a) => (
-                      <label
-                        key={a.key}
-                        className="badge"
-                        style={{ cursor: writable ? "pointer" : "not-allowed", opacity: writable ? 1 : 0.6 }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!f[a.key]}
-                          disabled={!writable}
-                          onChange={(e) => toggleFlag(r.id, a.key, e.target.checked)}
-                          style={{ marginRight: 6 }}
-                        />
-                        {a.label}
-                      </label>
-                    ))}
-                  </div>
-                </td>
-              </tr>
+                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                                {ACTIONS.map((a) => (
+                                  <label
+                                    key={a.key}
+                                    className="badge"
+                                    style={{ cursor: writable ? "pointer" : "not-allowed", opacity: writable ? 1 : 0.6 }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={!!f[a.key]}
+                                      disabled={!writable}
+                                      onChange={(e) => toggleFlag(r.id, a.key, e.target.checked)}
+                                      style={{ marginRight: 6 }}
+                                    />
+                                    {a.label}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             );
           })}
         </tbody>
