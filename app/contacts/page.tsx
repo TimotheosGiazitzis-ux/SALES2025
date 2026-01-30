@@ -89,8 +89,7 @@ export default async function ContactsPage() {
       </div>
 
       <p style={{ marginTop: 6, color: "#555" }}>
-        Filtere nach Aktion/Ort/Name und sieh die Live-Zähler oben. Azubi ist
-        read-only.
+        Sortiert nach Unternehmen von A bis Z
       </p>
 
       <ContactsTable role={role} rows={rows} />
